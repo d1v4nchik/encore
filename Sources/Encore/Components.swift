@@ -108,6 +108,8 @@ struct BatteryTile: View {
     let reading: BatteryReading?
     var stale = false
     var large = false
+    /// Shown instead of the level bar when the component isn't live ("In case", "Lid closed").
+    var note: String? = nil
 
     private var tint: Color {
         guard let r = reading else { return .secondary }
@@ -140,18 +142,27 @@ struct BatteryTile: View {
                 .foregroundStyle(reading == nil || stale ? .secondary : .primary)
                 .contentTransition(.numericText())
 
-            GeometryReader { g in
-                ZStack(alignment: .leading) {
-                    Capsule().fill(.primary.opacity(0.1))
-                    if let r = reading {
-                        Capsule()
-                            .fill(tint.gradient)
-                            .frame(width: max(g.size.width * Double(r.level) / 100, 5))
-                            .opacity(stale ? 0.45 : 1)
+            ZStack(alignment: .leading) {
+                if let note {
+                    Text(note)
+                        .font(.system(size: large ? 11 : 10, weight: .medium))
+                        .foregroundStyle(.tertiary)
+                        .lineLimit(1)
+                } else {
+                    GeometryReader { g in
+                        ZStack(alignment: .leading) {
+                            Capsule().fill(.primary.opacity(0.1))
+                            if let r = reading {
+                                Capsule()
+                                    .fill(tint.gradient)
+                                    .frame(width: max(g.size.width * Double(r.level) / 100, 5))
+                            }
+                        }
                     }
+                    .frame(height: large ? 5 : 4)
                 }
             }
-            .frame(height: large ? 5 : 4)
+            .frame(height: 13, alignment: .center)
         }
         .padding(.horizontal, large ? 13 : 11)
         .padding(.vertical, large ? 12 : 10)
@@ -159,7 +170,7 @@ struct BatteryTile: View {
         .glassEffect(.regular, in: .rect(cornerRadius: large ? 18 : 16, style: .continuous))
         .animation(.spring(duration: 0.7, bounce: 0.25), value: reading?.level)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(reading.map { "\(label), \($0.level) percent\($0.isCharging ? ", charging" : "")" } ?? "\(label), unknown")
+        .accessibilityLabel(reading.map { "\(label), \($0.level) percent\($0.isCharging ? ", charging" : "")\(note.map { ", \($0)" } ?? "")" } ?? "\(label), \(note ?? "unknown")")
     }
 }
 
@@ -169,11 +180,16 @@ struct BatteryTiles: View {
 
     var body: some View {
         HStack(spacing: large ? 10 : 8) {
-            BatteryTile(symbol: "earbud.left", label: "Left", reading: buds.battery[.left], large: large)
-            BatteryTile(symbol: "earbud.right", label: "Right", reading: buds.battery[.right], large: large)
-            BatteryTile(symbol: "earbuds.case", label: "Case", reading: buds.battery[.chargingCase],
-                        stale: buds.caseIsStale, large: large)
+            tile(.left, symbol: "earbud.left", label: "Left", missingNote: "In case")
+            tile(.right, symbol: "earbud.right", label: "Right", missingNote: "In case")
+            tile(.chargingCase, symbol: "earbuds.case", label: "Case", missingNote: "Lid closed")
         }
+    }
+
+    private func tile(_ c: BatteryComponent, symbol: String, label: String, missingNote: String) -> some View {
+        let live = buds.battery[c] != nil && !buds.isStale(c)
+        return BatteryTile(symbol: symbol, label: label, reading: buds.battery[c], stale: !live,
+                           large: large, note: live ? nil : missingNote)
     }
 }
 
@@ -331,8 +347,10 @@ struct BatteryRow: View {
 
     var body: some View {
         HStack(spacing: spacing) {
-            BatteryRing(symbol: "earbud.left", reading: buds.battery[.left], size: size, label: "Left earbud")
-            BatteryRing(symbol: "earbud.right", reading: buds.battery[.right], size: size, label: "Right earbud")
+            BatteryRing(symbol: "earbud.left", reading: buds.battery[.left], stale: buds.isStale(.left),
+                        size: size, label: "Left earbud")
+            BatteryRing(symbol: "earbud.right", reading: buds.battery[.right], stale: buds.isStale(.right),
+                        size: size, label: "Right earbud")
             BatteryRing(symbol: "earbuds.case", reading: buds.battery[.chargingCase],
                         stale: buds.caseIsStale, size: size, label: "Charging case")
         }
@@ -520,18 +538,15 @@ extension Earbuds {
     var placementSummary: String? {
         let l = placement[.left], r = placement[.right]
         if l == nil && r == nil { return nil }
-        if l == .inEar && r == .inEar { return "In both ears" }
-        if l == .inCase && r == .inCase { return "Both in case" }
-        if l == .outOfEar && r == .outOfEar { return "Both out of the case" }
-        func word(_ p: EarbudPlacement?) -> String {
-            switch p {
-            case .inEar: "in ear"
-            case .outOfEar: "out of case"
-            case .inCase: "in case"
-            case nil: "—"
-            }
+        // A bud that isn't reported at all is sitting in the closed case.
+        let lIn = l == nil || l == .inCase
+        let rIn = r == nil || r == .inCase
+        switch (lIn, rIn) {
+        case (true, true): return "Both earbuds in case"
+        case (false, true): return "Right earbud in case"
+        case (true, false): return "Left earbud in case"
+        case (false, false): return (l == .inEar && r == .inEar) ? "In both ears" : "Both out of the case"
         }
-        return "Left \(word(l)) · Right \(word(r))"
     }
 }
 

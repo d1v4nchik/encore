@@ -23,8 +23,11 @@ public final class Earbuds: Identifiable {
 
     // Live state reported by the earbuds.
     public private(set) var battery: [BatteryComponent: BatteryReading] = [:]
-    /// Case level is only reported while the case is open; we keep the last value around.
-    public private(set) var caseIsStale = false
+    /// Components the earbuds stopped reporting (bud back in a closed case, lid closed…).
+    /// Their last known reading is kept in `battery` and shown dimmed.
+    public private(set) var stale: Set<BatteryComponent> = []
+    public func isStale(_ c: BatteryComponent) -> Bool { stale.contains(c) }
+    public var caseIsStale: Bool { stale.contains(.chargingCase) }
     public private(set) var placement: [EarbudSide: EarbudPlacement] = [:]
     public private(set) var noiseControl: NoiseControlMode?
     public private(set) var supportsNoiseControl = false
@@ -55,7 +58,7 @@ public final class Earbuds: Identifiable {
 
     /// Lowest earbud battery, for the menu bar.
     public var lowestBudLevel: Int? {
-        [battery[.left]?.level, battery[.right]?.level].compactMap { $0 }.min()
+        [BatteryComponent.left, .right].filter { !isStale($0) }.compactMap { battery[$0]?.level }.min()
     }
 
     // Callbacks for the app layer.
@@ -87,6 +90,7 @@ public final class Earbuds: Identifiable {
         self.device = device
         self.id = device.addressString ?? UUID().uuidString
         self.name = device.name ?? "Earbuds"
+        loadLastKnownBattery()
     }
 
     // MARK: Lifecycle
@@ -400,17 +404,39 @@ public final class Earbuds: Identifiable {
     private func applyBattery(_ readings: [BatteryComponent: BatteryReading]) {
         guard !readings.isEmpty else { return }
         var next = battery
-        next[.left] = readings[.left]
-        next[.right] = readings[.right]
-        if let c = readings[.chargingCase] {
-            next[.chargingCase] = c
-            caseIsStale = false
-        } else if next[.chargingCase] != nil {
-            caseIsStale = true
+        var nextStale = stale
+        for comp in BatteryComponent.allCases {
+            if let r = readings[comp] {
+                next[comp] = r
+                nextStale.remove(comp)
+            } else if next[comp] != nil {
+                // Not reported: bud in a closed case / case lid closed. Keep the last level.
+                nextStale.insert(comp)
+            }
         }
+        if nextStale != stale { stale = nextStale }
         if next != battery {
             battery = next
+            saveLastKnownBattery()
             onBatteryChange?(self)
+        }
+    }
+
+    // Last known levels survive relaunches (shown dimmed until the earbuds report again).
+    private var batteryDefaultsKey: String { "lastBattery.\(id)" }
+
+    private func saveLastKnownBattery() {
+        var dict: [String: Int] = [:]
+        for (comp, r) in battery { dict[String(comp.rawValue)] = r.level }
+        UserDefaults.standard.set(dict, forKey: batteryDefaultsKey)
+    }
+
+    private func loadLastKnownBattery() {
+        guard let dict = UserDefaults.standard.dictionary(forKey: batteryDefaultsKey) as? [String: Int] else { return }
+        for (key, level) in dict {
+            guard let raw = UInt8(key), let comp = BatteryComponent(rawValue: raw) else { continue }
+            battery[comp] = BatteryReading(level: level, isCharging: false)
+            stale.insert(comp)
         }
     }
 }

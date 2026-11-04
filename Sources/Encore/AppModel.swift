@@ -98,7 +98,7 @@ final class AppModel {
         var warned = lowWarned[buds.id] ?? []
         var low: [String] = []
         for comp in [BatteryComponent.left, .right] {
-            guard let r = buds.battery[comp] else { continue }
+            guard let r = buds.battery[comp], !buds.isStale(comp) else { continue }
             if r.isCharging || r.level > 25 {
                 warned.remove(comp.rawValue)
             } else if r.level <= 20, !warned.contains(comp.rawValue) {
