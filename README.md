@@ -4,6 +4,19 @@ A native macOS menu bar app for **OPPO Enco** earbuds. It's like HeyMelody, but 
 
 Built and tested with the **OPPO Enco Buds3**. Other OPPO, OnePlus and realme earbuds that work with HeyMelody use the same protocol and should mostly work too.
 
+## Download
+
+### [⬇︎ Download Encore.dmg](https://github.com/d1v4nchik/encore/releases/latest/download/Encore.dmg)
+
+Universal (Apple silicon and Intel) · macOS 26 Tahoe or later
+
+1. Open the DMG and drag **Encore** into **Applications**.
+2. Open Encore from Launchpad or Spotlight. It lives in your menu bar.
+3. **First launch only:** Encore isn't notarized (that needs a paid Apple developer account), so macOS may say it can't check it for malware. Click **Done**, open **System Settings → Privacy & Security**, scroll down and click **Open Anyway** next to Encore.
+4. Click **Allow** when Encore asks to use Bluetooth.
+
+Your earbuds need to be paired in **System Settings → Bluetooth** first.
+
 ## Features
 
 - **Battery at a glance:** glass tiles for the left bud, right bud and case (last known levels stay visible, dimmed), plus an optional percentage in the menu bar.
@@ -24,7 +37,7 @@ Encore only shows the controls your earbuds actually answer for, so unsupported 
 - macOS 26 (Tahoe) or later, Apple silicon
 - Earbuds already paired in **System Settings → Bluetooth**
 
-## Build & install
+## Build from source
 
 You don't need Xcode. The Command Line Tools are enough:
 
@@ -32,7 +45,13 @@ You don't need Xcode. The Command Line Tools are enough:
 ./scripts/build.sh --install
 ```
 
-This compiles with `swiftc`, generates the app icon, ad-hoc signs `Encore.app` and copies it to `/Applications` (or `~/Applications` if that isn't writable). The first time it opens, macOS asks for Bluetooth permission.
+This compiles a universal binary with `swiftc`, generates the app icon, ad-hoc signs `Encore.app` and copies it to `/Applications` (or `~/Applications` if that isn't writable). Use `ARCHS=arm64` for a faster single-architecture build.
+
+To make the drag-to-install disk image (`build/Encore.dmg`):
+
+```bash
+./scripts/make-dmg.sh
+```
 
 `Package.swift` is included too, so `swift build` works on a healthy toolchain.
 

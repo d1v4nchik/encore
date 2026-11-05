@@ -7,8 +7,8 @@ ROOT="${0:A:h:h}"
 BUILD="$ROOT/build"
 APP="$BUILD/Encore.app"
 SDK="$(xcrun --show-sdk-path)"
-TARGET="arm64-apple-macos26.0"
-VERSION="1.0"
+TARGET="$(uname -m)-apple-macos26.0"
+VERSION="${VERSION:-1.0}"
 
 cd "$ROOT"
 mkdir -p "$BUILD"
@@ -19,13 +19,20 @@ swiftc -O -target "$TARGET" -sdk "$SDK" -module-name SelfTest \
   -framework IOBluetooth -o "$BUILD/selftest"
 "$BUILD/selftest" > /dev/null && echo "  all checks passed"
 
-echo "▸ Compiling Encore"
+# Universal by default (Apple silicon + Intel). `ARCHS=arm64 ./scripts/build.sh` for a quick local build.
+ARCHS=(${=ARCHS:-arm64 x86_64})
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
-swiftc -O -parse-as-library -target "$TARGET" -sdk "$SDK" -module-name Encore \
-  Sources/EncoKit/*.swift Sources/Encore/*.swift \
-  -framework IOBluetooth -framework ServiceManagement -framework UserNotifications \
-  -o "$APP/Contents/MacOS/Encore"
+SLICES=()
+for arch in $ARCHS; do
+  echo "▸ Compiling Encore ($arch)"
+  swiftc -O -parse-as-library -target "$arch-apple-macos26.0" -sdk "$SDK" -module-name Encore \
+    Sources/EncoKit/*.swift Sources/Encore/*.swift \
+    -framework IOBluetooth -framework ServiceManagement -framework UserNotifications \
+    -o "$BUILD/Encore-$arch"
+  SLICES+=("$BUILD/Encore-$arch")
+done
+lipo -create $SLICES -output "$APP/Contents/MacOS/Encore"
 
 echo "▸ App icon"
 if [[ ! -f "$BUILD/AppIcon.icns" || "$ROOT/scripts/make-icon.swift" -nt "$BUILD/AppIcon.icns" ]]; then
