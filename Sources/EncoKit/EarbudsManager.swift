@@ -21,6 +21,7 @@ public final class EarbudsManager {
     @ObservationIgnored private let bridge = NotificationBridge()
     @ObservationIgnored private let log = EncoreLog.shared
     @ObservationIgnored private var pendingConnect: Set<String> = []
+    @ObservationIgnored private var scheduledStarts: Set<String> = []
 
     private static let lastUsedKey = "lastUsedEarbudsAddress"
 
@@ -40,7 +41,8 @@ public final class EarbudsManager {
 
     /// Re-reads the paired device list (e.g. after the user pairs new earbuds).
     public func rescan() {
-        bluetoothPoweredOn = IOBluetoothHostController.default()?.powerState == kBluetoothHCIPowerStateON
+        let powered = IOBluetoothHostController.default()?.powerState == kBluetoothHCIPowerStateON
+        if powered != bluetoothPoweredOn { bluetoothPoweredOn = powered }
         let paired = (IOBluetoothDevice.pairedDevices() as? [IOBluetoothDevice]) ?? []
         var next: [Earbuds] = []
         for device in paired where Self.looksLikeOppoEarbuds(device) {
@@ -50,8 +52,10 @@ public final class EarbudsManager {
                 next.append(makeEarbuds(device))
             }
         }
-        all = next
-        log("Paired devices: \(paired.count), OPPO earbuds: \(next.map(\.name))")
+        if next.map(\.id) != all.map(\.id) {
+            all = next
+            log("Paired devices: \(paired.count), OPPO earbuds: \(next.map(\.name))")
+        }
         if current == nil || !all.contains(where: { $0 === current }) {
             let last = UserDefaults.standard.string(forKey: Self.lastUsedKey)
             current = all.first(where: { $0.isAudioConnected })
@@ -61,6 +65,7 @@ public final class EarbudsManager {
     }
 
     public func select(_ buds: Earbuds) {
+        guard current !== buds else { return }
         current = buds
         UserDefaults.standard.set(buds.id, forKey: Self.lastUsedKey)
     }
@@ -115,6 +120,9 @@ public final class EarbudsManager {
         }
         guard let buds = all.first(where: { $0.id == address }) else { return }
         pendingConnect.remove(address)
+        // macOS 26 re-sends "connected" every ~50 s (and 2-3 times per real connection).
+        // Ignore it while we're already handling this connection.
+        guard buds.link == .offline, !scheduledStarts.contains(address) else { return }
         log("\(buds.name) connected")
         select(buds)
 
@@ -124,8 +132,10 @@ public final class EarbudsManager {
                 selector: #selector(NotificationBridge.disconnected(_:device:)))
         }
         // Give A2DP/HFP a moment to settle before opening the control channel.
+        scheduledStarts.insert(address)
         Task { @MainActor in
             try? await Task.sleep(for: .milliseconds(1200))
+            self.scheduledStarts.remove(address)
             buds.start()
         }
     }

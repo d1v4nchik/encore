@@ -40,7 +40,6 @@ public final class Earbuds: Identifiable {
     public private(set) var isRinging = false
     /// Current EQ preset index, nil until the earbuds answer 0x010F.
     public private(set) var eqPreset: UInt8?
-    public private(set) var lastUpdate: Date?
 
     public var modelName: String {
         if let productID, let known = OppoModels.names[productID] { return known }
@@ -103,14 +102,18 @@ public final class Earbuds: Identifiable {
     /// Call once the Bluetooth (audio) connection is up.
     func start() {
         guard device.isConnected() else { link = .offline; return }
-        if case .ready = link { return }
-        if rfcomm != nil, link == .connecting { return }
+        guard rfcomm == nil else { return }          // already opening / open
         name = device.name ?? name
-        link = .connecting
-        announcedReady = false
+        // A fresh Bluetooth connection: show "Connecting…" and announce once it's ready.
+        // A silent channel reopen (link already .ready) keeps the UI exactly as it is.
+        if link == .offline {
+            link = .connecting
+            announcedReady = false
+        }
         decoder.reset()
         queue.removeAll()
         inFlight = nil
+        timeoutTask?.cancel()
 
         let r = RFCOMMLink(device: device)
         r.log = { [weak self] msg in self?.log("[\(self?.name ?? "?")] \(msg)") }
@@ -149,26 +152,31 @@ public final class Earbuds: Identifiable {
             rfcomm = nil
             if device.isConnected(), reconnectAttempts < 3 {
                 reconnectAttempts += 1
-                link = .connecting
+                let delay = 2 * reconnectAttempts
                 Task { [weak self] in
-                    try? await Task.sleep(for: .seconds(2 * (self?.reconnectAttempts ?? 1)))
-                    self?.link = .offline
+                    try? await Task.sleep(for: .seconds(delay))
                     self?.start()
                 }
             } else {
                 link = device.isConnected() ? .unavailable(reason) : .offline
             }
         case .idle:
-            // Channel closed underneath us (earbuds back in case, out of range…).
-            if rfcomm != nil {
-                stop(offline: !device.isConnected())
-                if device.isConnected() {
-                    link = .offline
-                    Task { [weak self] in
-                        try? await Task.sleep(for: .seconds(2))
-                        self?.start()
-                    }
+            // Channel closed underneath us. These buds do that when the case lid moves or the
+            // link idles. If audio is still connected, reopen quietly and keep the UI as is.
+            guard rfcomm != nil else { return }
+            rfcomm?.onStateChange = nil
+            rfcomm = nil
+            timeoutTask?.cancel()
+            inFlight = nil
+            queue.removeAll()
+            if device.isConnected() {
+                log("[\(name)] Control channel dropped – reopening quietly")
+                Task { [weak self] in
+                    try? await Task.sleep(for: .milliseconds(1500))
+                    self?.start()
                 }
+            } else {
+                stop()
             }
         case .resolving, .opening:
             break
@@ -388,16 +396,17 @@ public final class Earbuds: Identifiable {
         case OppoCommand.battery.reply where f.isOK:
             applyBattery(OppoParse.battery(p))
         case OppoCommand.earbudsStatus.reply where f.isOK:
-            placement = OppoParse.earbudsStatus(p)
+            setPlacement(OppoParse.earbudsStatus(p))
         case OppoCommand.miscConfig.reply where f.isOK:
-            for (k, v) in OppoParse.misc(p) { settings[k] = v }
+            for (k, v) in OppoParse.misc(p) where settings[k] != v { settings[k] = v }
         case OppoCommand.ancConfig.reply:
             if f.isOK, let mode = OppoParse.noiseControl(p) {
                 supportsNoiseControl = true
                 noiseControl = mode
             }
         case OppoCommand.touchConfig.reply where f.isOK:
-            touch = OppoParse.touchConfig(p)
+            let t = OppoParse.touchConfig(p)
+            if t != touch { touch = t }
         case OppoCommand.productID.reply:
             productID = OppoParse.productID(p)
         case OppoCommand.firmware.reply:
@@ -405,15 +414,18 @@ public final class Earbuds: Identifiable {
         case OppoCommand.findDevice.reply where !f.isOK:
             isRinging = false
         case OppoCommand.eqPreset.reply where f.isOK && p.count >= 2:
-            eqPreset = p[1]
+            if eqPreset != p[1] { eqPreset = p[1] }
         case .eqChanged where !p.isEmpty:
-            eqPreset = p[p.count - 1]
+            if eqPreset != p[p.count - 1] { eqPreset = p[p.count - 1] }
         case .notification:
             handleNotification(p)
         default:
             break
         }
-        lastUpdate = Date()
+    }
+
+    private func setPlacement(_ new: [EarbudSide: EarbudPlacement]) {
+        if new != placement { placement = new }
     }
 
     private func handleNotification(_ p: [UInt8]) {
@@ -422,14 +434,14 @@ public final class Earbuds: Identifiable {
         case .battery:
             applyBattery(OppoParse.battery(p))
         case .earbudsStatus:
-            placement = OppoParse.earbudsStatus(p)
+            setPlacement(OppoParse.earbudsStatus(p))
         case .noiseControl:
             if let mode = OppoParse.noiseControl(p) {
                 supportsNoiseControl = true
                 noiseControl = mode
             }
         case .gameMode:
-            if p.count >= 2 { settings[.gameMode] = p[1] == 1 }
+            if p.count >= 2, settings[.gameMode] != (p[1] == 1) { settings[.gameMode] = p[1] == 1 }
         case .multipoint:
             break
         }

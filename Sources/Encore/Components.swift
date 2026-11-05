@@ -9,38 +9,120 @@ enum Theme {
 }
 
 /// Soft, slowly drifting wash of the accent color so the glass has something to refract.
+/// Animated by SwiftUI (display refresh rate) and frozen while the window is hidden.
 struct AuroraBackground: View {
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.windowIsVisible) private var visible
+
+    private static let drift: [(Float, Float)] = [(0, 0), (0.09, -0.07), (-0.08, 0.08)]
 
     var body: some View {
-        TimelineView(.animation(minimumInterval: 1 / 20)) { context in
-            let t = context.date.timeIntervalSinceReferenceDate
-            let d = Float(sin(t / 7) * 0.1)
-            let e = Float(cos(t / 9) * 0.1)
-            let k = scheme == .dark ? 0.75 : 1.0
-            let a = Theme.accent
-            ZStack {
-                Color(nsColor: .windowBackgroundColor)
-                MeshGradient(
-                    width: 3, height: 3,
-                    points: [
-                        [0, 0], [0.5 + d, 0], [1, 0],
-                        [0, 0.5 + e], [0.5 - d, 0.5 + d], [1, 0.5 - e],
-                        [0, 1], [0.5 + e, 1], [1, 1],
-                    ],
-                    colors: [
-                        a.opacity(0.42 * k), a.opacity(0.14 * k), a.opacity(0.30 * k),
-                        a.opacity(0.10 * k), a.opacity(0.03), a.opacity(0.22 * k),
-                        a.opacity(0.26 * k), a.opacity(0.08 * k), a.opacity(0.38 * k),
-                    ]
-                )
-                // A second, hue-shifted layer gives the wash some depth.
-                RadialGradient(colors: [a.opacity(0.25 * k), .clear], center: .bottomTrailing,
-                               startRadius: 0, endRadius: 420)
-                    .hueRotation(.degrees(35))
+        ZStack {
+            Color(nsColor: .windowBackgroundColor)
+            if visible {
+                PhaseAnimator([0, 1, 2]) { phase in
+                    mesh(Self.drift[phase])
+                } animation: { _ in .easeInOut(duration: 8) }
+            } else {
+                mesh(Self.drift[0])
             }
+            RadialGradient(colors: [Theme.accent.opacity(0.25 * k), .clear], center: .bottomTrailing,
+                           startRadius: 0, endRadius: 420)
+                .hueRotation(.degrees(35))
         }
         .ignoresSafeArea()
+    }
+
+    private var k: Double { scheme == .dark ? 0.75 : 1.0 }
+
+    private func mesh(_ o: (Float, Float)) -> some View {
+        let (d, e) = o
+        let a = Theme.accent
+        return MeshGradient(
+            width: 3, height: 3,
+            points: [
+                [0, 0], [0.5 + d, 0], [1, 0],
+                [0, 0.5 + e], [0.5 - d, 0.5 + d], [1, 0.5 - e],
+                [0, 1], [0.5 + e, 1], [1, 1],
+            ],
+            colors: [
+                a.opacity(0.42 * k), a.opacity(0.14 * k), a.opacity(0.30 * k),
+                a.opacity(0.10 * k), a.opacity(0.03), a.opacity(0.22 * k),
+                a.opacity(0.26 * k), a.opacity(0.08 * k), a.opacity(0.38 * k),
+            ]
+        )
+    }
+}
+
+// MARK: - Window visibility
+
+private struct WindowIsVisibleKey: EnvironmentKey {
+    static let defaultValue = true
+}
+
+extension EnvironmentValues {
+    /// False while the hosting window is closed, hidden or fully covered. Animations pause then.
+    var windowIsVisible: Bool {
+        get { self[WindowIsVisibleKey.self] }
+        set { self[WindowIsVisibleKey.self] = newValue }
+    }
+}
+
+/// Reports whether the hosting NSWindow is actually on screen (occlusion-aware).
+struct WindowVisibilityReader: NSViewRepresentable {
+    @Binding var isVisible: Bool
+
+    func makeNSView(context: Context) -> TrackingView {
+        let view = TrackingView()
+        let binding = $isVisible
+        view.onChange = { visible in
+            if binding.wrappedValue != visible { binding.wrappedValue = visible }
+        }
+        return view
+    }
+
+    func updateNSView(_ nsView: TrackingView, context: Context) {}
+
+    final class TrackingView: NSView {
+        var onChange: ((Bool) -> Void)?
+        private var observers: [NSObjectProtocol] = []
+
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            observers.forEach(NotificationCenter.default.removeObserver)
+            observers = []
+            guard let window else { onChange?(false); return }
+            for name in [NSWindow.didChangeOcclusionStateNotification, NSWindow.willCloseNotification] {
+                observers.append(NotificationCenter.default.addObserver(forName: name, object: window, queue: .main) { [weak self] note in
+                    let closing = note.name == NSWindow.willCloseNotification
+                    self?.report(closing: closing)
+                })
+            }
+            report(closing: false)
+        }
+
+        private func report(closing: Bool) {
+            let visible = !closing && window?.occlusionState.contains(.visible) == true
+            DispatchQueue.main.async { [weak self] in self?.onChange?(visible) }
+        }
+
+        deinit { observers.forEach(NotificationCenter.default.removeObserver) }
+    }
+}
+
+extension View {
+    /// Tracks the hosting window's visibility and passes it down as `windowIsVisible`.
+    func pausesAnimationsWhenHidden() -> some View {
+        modifier(PausesWhenHidden())
+    }
+}
+
+private struct PausesWhenHidden: ViewModifier {
+    @State private var visible = true
+    func body(content: Content) -> some View {
+        content
+            .environment(\.windowIsVisible, visible)
+            .background(WindowVisibilityReader(isVisible: $visible).frame(width: 0, height: 0))
     }
 }
 
@@ -57,46 +139,62 @@ extension View {
 // MARK: - The earbuds "buddy"
 
 /// The hero: earbuds floating over a soft glow, with a little ground shadow that shrinks
-/// as they bob. Breathes while connecting, hops when tapped or when they connect.
+/// as they rise. Breathes while connecting, hops when tapped or when they connect.
+/// The float runs on SwiftUI's animation engine and stops while the window is hidden.
 struct EarbudsBuddy: View {
     let link: Earbuds.Link
     var size: CGFloat = 84
     var glow = true
+    @Environment(\.windowIsVisible) private var visible
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var bounce = 0
 
+    private var floats: Bool { link.isReady && visible && !reduceMotion }
+
     var body: some View {
-        TimelineView(.animation(minimumInterval: 1 / 30, paused: !link.isReady)) { context in
-            let t = context.date.timeIntervalSinceReferenceDate
-            let phase = link.isReady ? (sin(t * 1.7) + 1) / 2 : 0      // 0…1
-            let lift = phase * size * 0.07
-            ZStack {
-                if glow {
-                    Circle()
-                        .fill(Theme.accent.gradient)
-                        .frame(width: size * 0.95, height: size * 0.95)
-                        .blur(radius: size * 0.3)
-                        .opacity(link.isReady ? 0.55 : (link == .offline ? 0.12 : 0.3))
-                }
-                Ellipse()
-                    .fill(.black.opacity(0.28 - phase * 0.12))
-                    .frame(width: size * (0.5 - phase * 0.08), height: size * 0.07)
-                    .blur(radius: size * 0.025)
-                    .offset(y: size * 0.4)
-                Image(systemName: "earbuds")
-                    .font(.system(size: size * 0.6, weight: .light))
-                    .symbolRenderingMode(.hierarchical)
-                    .foregroundStyle(link == .offline ? AnyShapeStyle(.secondary) : AnyShapeStyle(.primary))
-                    .symbolEffect(.breathe, isActive: link == .connecting)
-                    .symbolEffect(.bounce, value: bounce)
-                    .rotationEffect(.degrees(link.isReady ? sin(t * 0.85) * 3 : 0))
-                    .offset(y: -lift)
+        ZStack {
+            if glow {
+                Circle()
+                    .fill(Theme.accent.gradient)
+                    .frame(width: size * 0.95, height: size * 0.95)
+                    .blur(radius: size * 0.3)
+                    .opacity(link.isReady ? 0.55 : (link == .offline ? 0.12 : 0.3))
+                    .animation(.smooth(duration: 0.6), value: link)
             }
-            .frame(width: size, height: size)
+            if floats {
+                PhaseAnimator([false, true]) { up in
+                    figure(up ? 1 : 0)
+                } animation: { _ in .easeInOut(duration: 1.9) }
+            } else {
+                figure(0)
+            }
         }
+        .frame(width: size, height: size)
         .contentShape(Circle())
         .onChange(of: link.isReady) { _, ready in if ready { bounce += 1 } }
         .onTapGesture { bounce += 1 }
         .accessibilityHidden(true)
+    }
+
+    /// `lift` 0 = resting, 1 = top of the float.
+    private func figure(_ lift: CGFloat) -> some View {
+        ZStack {
+            Ellipse()
+                .fill(.black.opacity(0.26))
+                .frame(width: size * 0.5, height: size * 0.07)
+                .blur(radius: size * 0.025)
+                .scaleEffect(x: 1 - lift * 0.18, y: 1)
+                .opacity(1 - lift * 0.4)
+                .offset(y: size * 0.4)
+            Image(systemName: "earbuds")
+                .font(.system(size: size * 0.6, weight: .light))
+                .symbolRenderingMode(.hierarchical)
+                .foregroundStyle(link == .offline ? AnyShapeStyle(.secondary) : AnyShapeStyle(.primary))
+                .symbolEffect(.breathe, isActive: link == .connecting && !reduceMotion)
+                .symbolEffect(.bounce, value: bounce)
+                .rotationEffect(.degrees(Double(lift) * 5 - 2.5))
+                .offset(y: -lift * size * 0.07)
+        }
     }
 }
 

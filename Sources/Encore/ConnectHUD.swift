@@ -93,6 +93,7 @@ private struct HUDView: View {
         }
         .padding(12)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .pausesAnimationsWhenHidden()
     }
 
     private func card(_ buds: Earbuds) -> some View {

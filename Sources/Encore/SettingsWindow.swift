@@ -37,6 +37,7 @@ struct SettingsWindow: View {
             .scrollIndicators(.never)
         }
         .frame(width: 470, height: 760)
+        .pausesAnimationsWhenHidden()
         .onAppear { manager.rescan() }
     }
 }

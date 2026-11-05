@@ -13,9 +13,13 @@ struct MenuBarPanel: View {
                 VStack(spacing: 10) {
                     if let buds = manager.current {
                         Hero(buds: buds)
-                        if buds.link.isReady {
+                        // Keep the layout steady while (re)connecting: show last known values,
+                        // dimmed, instead of swapping in a different-height placeholder.
+                        if buds.link.isReady || (buds.link == .connecting && !buds.battery.isEmpty) {
                             BatteryTiles(buds: buds)
                             QuickTiles(buds: buds)
+                                .disabled(!buds.link.isReady)
+                                .opacity(buds.link.isReady ? 1 : 0.5)
                         } else if buds.link == .connecting {
                             HStack(spacing: 8) {
                                 ProgressView().controlSize(.small)
@@ -35,6 +39,7 @@ struct MenuBarPanel: View {
                     }
                 }
             }
+            .animation(.smooth(duration: 0.35), value: manager.current?.link)
             .padding([.horizontal, .top], 12)
             .padding(.bottom, 8)
 
@@ -43,6 +48,7 @@ struct MenuBarPanel: View {
                 .padding(6)
         }
         .frame(width: 320)
+        .pausesAnimationsWhenHidden()
         .onAppear {
             manager.rescan()
             manager.current?.refresh()
