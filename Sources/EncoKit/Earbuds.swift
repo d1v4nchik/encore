@@ -38,6 +38,8 @@ public final class Earbuds: Identifiable {
     public private(set) var productID: String?
     public private(set) var firmware: String?
     public private(set) var isRinging = false
+    /// Current EQ preset index, nil until the earbuds answer 0x010F.
+    public private(set) var eqPreset: UInt8?
     public private(set) var lastUpdate: Date?
 
     public var modelName: String {
@@ -46,6 +48,9 @@ public final class Earbuds: Identifiable {
     }
 
     public var isAudioConnected: Bool { device.isConnected() }
+
+    public var eqPresets: [EQPreset] { EQPreset.presets(forModel: modelName) }
+    public var supportsEQ: Bool { eqPreset != nil && !eqPresets.isEmpty }
 
     /// Names for the gesture slots this model uses (music context). Slots without a name are hidden.
     public var gestureNames: [TouchGesture: String] {
@@ -180,6 +185,7 @@ public final class Earbuds: Identifiable {
             send(OppoRequest.misc([setting]))
         }
         send(OppoRequest.touchConfig())
+        if !eqPresets.isEmpty { send(OppoRequest.eqPreset(), attempts: 1) }
         send(OppoRequest.subscribe(SubscriptionTopic.allCases))
         send(OppoRequest.firmware()) { [weak self] _ in
             self?.markReady()
@@ -238,6 +244,20 @@ public final class Earbuds: Identifiable {
         }
     }
 
+    public func setEQ(_ preset: EQPreset) {
+        // Never send an index that isn't in this model's table – the firmware would take it.
+        guard eqPresets.contains(preset) else { return }
+        let previous = eqPreset
+        eqPreset = preset.index
+        send(OppoRequest.setEqPreset(preset.index)) { [weak self] reply in
+            guard let self else { return }
+            if reply?.isOK != true {
+                self.eqPreset = previous
+                self.send(OppoRequest.eqPreset(), attempts: 1)
+            }
+        }
+    }
+
     public func setTouch(_ binding: TouchBinding, _ action: TouchAction) {
         let previous = touch[binding]
         touch[binding] = action.rawValue
@@ -267,7 +287,7 @@ public final class Earbuds: Identifiable {
     public func runDiagnostics() {
         log("[\(name)] —— diagnostics: product \(productID ?? "?"), firmware \(firmware ?? "?") ——")
         for code in UInt16(0x0101)...0x0120 {
-            send((OppoCommand(code), [])) { [weak self] reply in
+            send((OppoCommand(code), []), attempts: 1) { [weak self] reply in
                 if let reply {
                     self?.log("diag \(OppoCommand(code)) → \(reply)")
                 } else {
@@ -277,6 +297,16 @@ public final class Earbuds: Identifiable {
         }
         send(OppoRequest.misc(MiscSetting.allCases)) { [weak self] reply in
             self?.log("diag misc(all) → \(reply.map(\.description) ?? "(no reply)")")
+        }
+        // Write-path check that can't change anything: re-apply the current EQ preset.
+        send(OppoRequest.eqPreset(), attempts: 1) { [weak self] reply in
+            guard let self, let reply, reply.isOK, reply.payload.count >= 2,
+                  self.eqPresets.contains(where: { $0.index == reply.payload[1] }) else { return }
+            let current = reply.payload[1]
+            self.log("diag EQ is \(current); re-applying it to test the write path")
+            self.send(OppoRequest.setEqPreset(current), attempts: 1) { [weak self] ack in
+                self?.log("diag EQ re-apply → \(ack.map(\.description) ?? "(no reply)")")
+            }
         }
     }
 
@@ -374,6 +404,10 @@ public final class Earbuds: Identifiable {
             firmware = OppoParse.firmware(p)
         case OppoCommand.findDevice.reply where !f.isOK:
             isRinging = false
+        case OppoCommand.eqPreset.reply where f.isOK && p.count >= 2:
+            eqPreset = p[1]
+        case .eqChanged where !p.isEmpty:
+            eqPreset = p[p.count - 1]
         case .notification:
             handleNotification(p)
         default:

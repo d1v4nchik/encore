@@ -96,6 +96,9 @@ private struct QuickTiles: View {
 
     var body: some View {
         VStack(spacing: 8) {
+            if buds.supportsEQ {
+                EQPicker(buds: buds)
+            }
             if buds.supportsNoiseControl {
                 GlassSegmented(
                     options: NoiseControlMode.displayOrder,

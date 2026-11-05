@@ -58,5 +58,13 @@ check(OppoParse.noiseControl([0x03, 0x01, 0x02]) == .transparency, "ANC notifica
 let fw = Array("1,2,152,2,2,152,3,2,151".utf8)
 check(OppoParse.firmware([0x00, 0x09] + fw + [0x00]) == "152.152.151", "firmware triples")
 
+// EQ (confirmed on Enco Buds3): set → 0x0406 [index]; only the model's own indexes are offered.
+check(OppoFrame(command: .setEqPreset, sequence: 0x2C, payload: [0x02]).encoded()
+      == [0xAA, 0x08, 0x00, 0x00, 0x06, 0x04, 0x2C, 0x01, 0x00, 0x02], "EQ set frame")
+let buds3EQ = EQPreset.presets(forModel: "OPPO Enco Buds3")
+check(buds3EQ.map(\.index) == [0, 2, 1] && buds3EQ.map(\.shortName) == ["Original", "Bass", "Vocals"], "Buds3 EQ presets in HeyMelody order")
+check(EQPreset.presets(forModel: "OPPO Enco Buds3 Pro+").isEmpty && EQPreset.presets(forModel: "Galaxy Buds2").isEmpty,
+      "no EQ offered for models with unverified tables")
+
 print(failures == 0 ? "\nAll checks passed." : "\n\(failures) check(s) failed.")
 exit(failures == 0 ? 0 : 1)

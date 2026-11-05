@@ -443,6 +443,25 @@ struct GlassSegmented<Option: Hashable & Identifiable>: View {
     }
 }
 
+// MARK: - Equalizer picker
+
+struct EQPicker: View {
+    let buds: Earbuds
+
+    var body: some View {
+        GlassSegmented(
+            options: buds.eqPresets,
+            selection: Binding(
+                get: { buds.eqPresets.first { $0.index == buds.eqPreset } },
+                set: { if let preset = $0 { buds.setEQ(preset) } }
+            ),
+            title: { $0.shortName },
+            symbol: { $0.symbol }
+        )
+        .accessibilityLabel("Equalizer")
+    }
+}
+
 // MARK: - Setting row (System Settings style, on glass)
 
 struct SettingRow<Trailing: View>: View {

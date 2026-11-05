@@ -30,6 +30,7 @@ public struct OppoCommand: RawRepresentable, Hashable, Sendable, CustomStringCon
     public static let earbudsStatus    = OppoCommand(0x0109)
     public static let ancConfig        = OppoCommand(0x010C)
     public static let miscConfig       = OppoCommand(0x010D)
+    public static let eqPreset         = OppoCommand(0x010F)
     public static let multipointList   = OppoCommand(0x0112)
     public static let notification     = OppoCommand(0x0204)
     public static let subscribe        = OppoCommand(0x0205)
@@ -37,6 +38,10 @@ public struct OppoCommand: RawRepresentable, Hashable, Sendable, CustomStringCon
     public static let setTouchConfig   = OppoCommand(0x0401)
     public static let setMiscConfig    = OppoCommand(0x0403)
     public static let setAncConfig     = OppoCommand(0x0404)
+    /// Payload: one byte, the preset's protocol index. The firmware does NOT range-check it.
+    public static let setEqPreset      = OppoCommand(0x0406)
+    /// Pushed after the preset changes (from us, the phone, or a gesture). Payload: [preset].
+    public static let eqChanged        = OppoCommand(0x0504)
     public static let findPhoneEvent   = OppoCommand(0x0502)
 
     public var isReply: Bool { rawValue & 0x8000 != 0 }
@@ -292,6 +297,10 @@ public enum OppoRequest {
         (.subscribe, [0x09] + topics.map(\.rawValue))
     }
 
+    public static func eqPreset() -> (OppoCommand, [UInt8]) { (.eqPreset, []) }
+
+    public static func setEqPreset(_ index: UInt8) -> (OppoCommand, [UInt8]) { (.setEqPreset, [index]) }
+
     public static func findEarbuds(_ ringing: Bool) -> (OppoCommand, [UInt8]) {
         (.findDevice, [ringing ? 1 : 0])
     }
@@ -399,6 +408,35 @@ public enum OppoParse {
             if v.contains(".") { break } // realme already sends a dotted version
         }
         return pieces.isEmpty ? raw : pieces.joined(separator: ".")
+    }
+}
+
+// MARK: - Equalizer presets
+
+public struct EQPreset: Identifiable, Hashable, Sendable {
+    /// Protocol index sent with 0x0406.
+    public let index: UInt8
+    public let name: String
+    public let shortName: String
+    public let symbol: String
+    public let blurb: String
+    public var id: UInt8 { index }
+
+    /// Presets per model, in HeyMelody's display order. Only models listed here get an EQ
+    /// UI, because the earbuds accept any index without validation.
+    /// Source: HeyMelody's device whitelist (mode types 22/31/32 → protocol 0/2/1).
+    public static func presets(forModel model: String) -> [EQPreset] {
+        let m = model.lowercased()
+        let isBuds3Family = m.contains("buds3") && !m.contains("buds3s") && !m.contains("pro+")
+        guard isBuds3Family else { return [] }
+        return [
+            EQPreset(index: 0, name: "Original Sound", shortName: "Original", symbol: "waveform",
+                     blurb: "OPPO's own tuning, balanced and true to the recording."),
+            EQPreset(index: 2, name: "Bass Boost", shortName: "Bass", symbol: "speaker.wave.3.fill",
+                     blurb: "Fuller, punchier low end for beats and movies."),
+            EQPreset(index: 1, name: "Clear Vocals", shortName: "Vocals", symbol: "music.mic",
+                     blurb: "Brings voices forward for podcasts, calls and acoustic tracks."),
+        ]
     }
 }
 

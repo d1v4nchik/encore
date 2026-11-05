@@ -8,6 +8,7 @@ Built and tested with the **OPPO Enco Buds3**. Other OPPO, OnePlus and realme ea
 
 - **Battery at a glance:** rings for the left bud, right bud and case, plus an optional percentage in the menu bar.
 - **Connection pop-up:** a glass card drops in at the top-right when your earbuds connect, like AirPods.
+- **Equalizer:** Original Sound, Bass Boost and Clear Vocals presets (Enco Buds3 family).
 - **Game Mode:** low-latency mode for games and video.
 - **Dual-device connection:** stay connected to your Mac and phone at the same time.
 - **Touch controls:** remap tap, double-tap, triple-tap and touch-and-hold on each earbud.
@@ -16,7 +17,7 @@ Built and tested with the **OPPO Enco Buds3**. Other OPPO, OnePlus and realme ea
 - **Low battery alerts**, connect and disconnect from the menu bar, and open at login.
 - **Diagnostics:** a live log of every packet, plus a probe for discovering new features.
 
-Encore only shows the controls your earbuds actually answer for, so unsupported features don't clutter the UI.
+Encore only shows the controls your earbuds actually answer for, so unsupported features don't clutter the UI. EQ is only offered for models with a verified preset table, because the earbuds accept any preset number without checking it.
 
 ## Requirements
 
@@ -52,6 +53,7 @@ Replies set the command's high bit (`0x0106` battery request → `0x8106` reply)
 | `0x0108` / `0x0401` | Read / set touch controls |
 | `0x0109` | Earbud placement (in case / out) |
 | `0x010C` / `0x0404` | Read / set noise control |
+| `0x010F` / `0x0406` | Read / set EQ preset (`0x0504` is pushed on change) |
 | `0x010D` / `0x0403` | Read / set toggles (Game Mode `0x06`, dual connection `0x11`) |
 | `0x0205` | Subscribe to live updates |
 | `0x0400` | Find My Earbuds tone |
@@ -69,6 +71,8 @@ The protocol details come from public reverse-engineering work:
 
 - [Gadgetbridge](https://codeberg.org/Freeyourgadget/Gadgetbridge)'s OPPO headphone support
 - The [oppo-pods](https://github.com/noctalia-dev/community-plugins/tree/main/oppo-pods) plugin for Noctalia, for the product ID list
+- [melodyctl](https://github.com/chiragverma11/melodyctl), for HeyMelody's per-model capability table (EQ preset indexes)
+- [OP-Buds-4-PC-Controls](https://github.com/Megalodon-sharky/OP-Buds-4-PC-Controls), for the EQ read/set commands
 - [Cracking OPOv1](https://aasheesh.vercel.app/blog/oneplus-buds), a write-up on the OnePlus Buds protocol
 
 Encore is an independent implementation.

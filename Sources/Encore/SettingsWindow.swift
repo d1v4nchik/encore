@@ -17,6 +17,7 @@ struct SettingsWindow: View {
                         if let buds = manager.current {
                             HeroCard(buds: buds)
                             if buds.link.isReady {
+                                if buds.supportsEQ { EqualizerSection(buds: buds) }
                                 if buds.supportsNoiseControl { NoiseControlSection(buds: buds) }
                                 SoundSection(buds: buds)
                                 TouchSection(buds: buds)
@@ -121,6 +122,26 @@ private struct NoiseControlSection: View {
                 title: { $0.shortTitle },
                 symbol: { $0.symbol }
             )
+        }
+    }
+}
+
+private struct EqualizerSection: View {
+    let buds: Earbuds
+
+    var body: some View {
+        let current = buds.eqPresets.first { $0.index == buds.eqPreset }
+        GlassSection(title: "Equalizer") {
+            EQPicker(buds: buds)
+            if let current {
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    Text(current.name).font(.system(size: 12.5, weight: .semibold))
+                    Text(current.blurb).font(.system(size: 11.5)).foregroundStyle(.secondary)
+                }
+                .padding(.horizontal, 4)
+                .contentTransition(.opacity)
+                .animation(.smooth, value: current)
+            }
         }
     }
 }
