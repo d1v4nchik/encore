@@ -6,7 +6,7 @@ Built and tested with the **OPPO Enco Buds3**. Other OPPO, OnePlus and realme ea
 
 ## Features
 
-- **Battery at a glance:** rings for the left bud, right bud and case, plus an optional percentage in the menu bar.
+- **Battery at a glance:** glass tiles for the left bud, right bud and case (last known levels stay visible, dimmed), plus an optional percentage in the menu bar.
 - **Connection pop-up:** a glass card drops in at the top-right when your earbuds connect, like AirPods.
 - **Equalizer:** Original Sound, Bass Boost and Clear Vocals presets (Enco Buds3 family).
 - **Game Mode:** low-latency mode for games and video.
