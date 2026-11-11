@@ -159,6 +159,15 @@ public final class Earbuds: Identifiable {
                 }
             } else {
                 link = device.isConnected() ? .unavailable(reason) : .offline
+                if device.isConnected() {
+                    // Try again every 30 s (e.g. once the phone lets go of the connection).
+                    Task { [weak self] in
+                        try? await Task.sleep(for: .seconds(30))
+                        guard let self, case .unavailable = self.link else { return }
+                        self.reconnectAttempts = 0
+                        self.start()
+                    }
+                }
             }
         case .idle:
             // Channel closed underneath us. These buds do that when the case lid moves or the

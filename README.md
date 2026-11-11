@@ -4,6 +4,27 @@ A native macOS menu bar app for **OPPO Enco** earbuds. It's like HeyMelody, but 
 
 Built and tested with the **OPPO Enco Buds3**. Other OPPO, OnePlus and realme earbuds that work with HeyMelody use the same protocol and should mostly work too.
 
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/popover-dark.png">
+    <img src="docs/screenshots/popover-light.png" width="300" alt="Encore's menu bar popover: battery for each earbud and the case, equalizer presets, and Game Mode, Dual Connect, Find Buds and Controls tiles">
+  </picture>
+  &nbsp;
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/settings-dark.png">
+    <img src="docs/screenshots/settings-light.png" width="300" alt="Encore's settings window: floating earbuds, battery tiles, equalizer and Sound and Connection toggles">
+  </picture>
+</p>
+
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/popup-dark.png">
+    <img src="docs/screenshots/popup-light.png" width="430" alt="The pop-up Encore shows when your earbuds connect, with battery rings for each earbud and the case">
+  </picture>
+  <br>
+  <sub>The menu bar popover, the settings window, and the pop-up you get when your earbuds connect. Encore follows your Mac's accent color and light or dark mode.</sub>
+</p>
+
 ## Download
 
 ### [⬇︎ Download Encore.dmg](https://github.com/d1v4nchik/encore/releases/latest/download/Encore.dmg)
@@ -83,6 +104,8 @@ The code is split in two:
 - `Sources/Encore` is the SwiftUI app: the menu bar popover, the settings window and the connection pop-up.
 
 `Sources/EncoKitSelfTest` checks the packet codec against captured frames and runs as part of every build.
+
+The screenshots in `docs/screenshots` come from Encore itself: `Encore --snapshots` photographs its own windows in dark and light mode, saves them to `~/Library/Logs/Encore/Screenshots`, and quits.
 
 ## Credits
 

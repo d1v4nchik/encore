@@ -16,7 +16,7 @@ final class ConnectHUD {
         state.buds = buds
         state.visible = false
 
-        let size = NSSize(width: 400, height: 128)
+        let size = NSSize(width: 440, height: 128)
         if let screen = NSScreen.main {
             let f = screen.visibleFrame
             panel.setFrame(NSRect(x: f.maxX - size.width - 4, y: f.maxY - size.height + 4,
@@ -103,6 +103,7 @@ private struct HUDView: View {
                 Text(buds.modelName)
                     .font(.system(size: 14, weight: .semibold, design: .rounded))
                     .lineLimit(1)
+                    .minimumScaleFactor(0.85)
                 Text("Connected")
                     .font(.system(size: 12))
                     .foregroundStyle(.secondary)

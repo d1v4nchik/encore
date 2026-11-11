@@ -353,7 +353,6 @@ private struct NoDevicesCard: View {
             Image(systemName: "earbuds")
                 .font(.system(size: 54, weight: .light))
                 .foregroundStyle(.secondary)
-                .symbolEffect(.wiggle, options: .repeat(.periodic(delay: 2.5)))
                 .frame(width: 112, height: 112)
                 .glassEffect(.regular, in: .circle)
             Text(model.manager.bluetoothPoweredOn ? "No OPPO Earbuds Yet" : "Bluetooth Is Off")

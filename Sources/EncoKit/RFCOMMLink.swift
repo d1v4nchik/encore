@@ -34,6 +34,9 @@ public final class RFCOMMLink: NSObject {
     private var channel: IOBluetoothRFCOMMChannel?
     private var candidates: [UInt8] = []
     private var sdpTimeout: DispatchWorkItem?
+    /// IOBluetooth sometimes never answers an open request (e.g. while the phone's HeyMelody
+    /// holds the earbuds' single control connection), so give each attempt a deadline.
+    private var openTimeout: DispatchWorkItem?
 
     public init(device: IOBluetoothDevice) {
         self.device = device
@@ -75,6 +78,7 @@ public final class RFCOMMLink: NSObject {
 
     public func close() {
         sdpTimeout?.cancel()
+        openTimeout?.cancel()
         candidates = []
         if let channel {
             channel.setDelegate(nil)
@@ -128,7 +132,7 @@ public final class RFCOMMLink: NSObject {
 
     private func tryNextCandidate() {
         guard !candidates.isEmpty else {
-            state = .failed("Couldn't open the earbuds' control channel")
+            state = .failed("Couldn't reach the earbuds' controls. If HeyMelody is open on your phone, close it.")
             return
         }
         let ch = candidates.removeFirst()
@@ -136,6 +140,19 @@ public final class RFCOMMLink: NSObject {
         var newChannel: IOBluetoothRFCOMMChannel?
         log?("openRFCOMMChannelAsync(\(ch))…")
         let result = device.openRFCOMMChannelAsync(&newChannel, withChannelID: ch, delegate: self)
+        if result == kIOReturnSuccess {
+            openTimeout?.cancel()
+            let timeout = DispatchWorkItem { [weak self] in
+                guard let self, case .opening(let current) = self.state, current == ch else { return }
+                self.log?("RFCOMM channel \(ch) didn't open within 8 s")
+                self.channel?.setDelegate(nil)
+                self.channel?.close()
+                self.channel = nil
+                self.tryNextCandidate()
+            }
+            openTimeout = timeout
+            DispatchQueue.main.asyncAfter(deadline: .now() + 8, execute: timeout)
+        }
         if result != kIOReturnSuccess {
             log?("openRFCOMMChannelAsync(\(ch)) → \(String(format: "0x%08X", result))")
             tryNextCandidate()
@@ -156,6 +173,7 @@ extension RFCOMMLink: IOBluetoothRFCOMMChannelDelegate {
     nonisolated public func rfcommChannelOpenComplete(_ rfcommChannel: IOBluetoothRFCOMMChannel!, status error: IOReturn) {
         onMain { [self] in
             guard case .opening(let ch) = state else { return }
+            openTimeout?.cancel()
             if error == kIOReturnSuccess {
                 channel = rfcommChannel
                 state = .open(channel: ch)

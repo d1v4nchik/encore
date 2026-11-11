@@ -157,6 +157,12 @@ struct EarbudsBuddy: View {
                 PhaseAnimator([false, true]) { up in
                     figure(up ? 1 : 0)
                 } animation: { _ in .easeInOut(duration: 1.9) }
+            } else if link == .connecting && visible && !reduceMotion {
+                // Gentle fade while connecting. Opacity is composited on the GPU; SF Symbol
+                // effects like .breathe are redrawn on the CPU every frame.
+                PhaseAnimator([1.0, 0.45]) { alpha in
+                    figure(0).opacity(alpha)
+                } animation: { _ in .easeInOut(duration: 1.1) }
             } else {
                 figure(0)
             }
@@ -182,7 +188,6 @@ struct EarbudsBuddy: View {
                 .font(.system(size: size * 0.6, weight: .light))
                 .symbolRenderingMode(.hierarchical)
                 .foregroundStyle(link == .offline ? AnyShapeStyle(.secondary) : AnyShapeStyle(.primary))
-                .symbolEffect(.breathe, isActive: link == .connecting && !reduceMotion)
                 .symbolEffect(.bounce, value: bounce)
                 .rotationEffect(.degrees(Double(lift) * 5 - 2.5))
                 .offset(y: -lift * size * 0.07)
@@ -222,7 +227,6 @@ struct BatteryTile: View {
                     Image(systemName: "bolt.fill")
                         .font(.system(size: 9, weight: .bold))
                         .foregroundStyle(Theme.accent)
-                        .symbolEffect(.pulse)
                 }
             }
             .foregroundStyle(.secondary)
@@ -231,6 +235,8 @@ struct BatteryTile: View {
                 .font(.system(size: large ? 22 : 18, weight: .semibold, design: .rounded).monospacedDigit())
                 .foregroundStyle(reading == nil || stale ? .secondary : .primary)
                 .contentTransition(.numericText())
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
 
             ZStack(alignment: .leading) {
                 if let note {
@@ -311,6 +317,7 @@ struct ControlTile: View {
                     Text(title)
                         .font(.system(size: 12.5, weight: .semibold))
                         .lineLimit(1)
+                        .minimumScaleFactor(0.8)
                     if let sub = subtitle ?? isOn.map({ $0 ? "On" : "Off" }) {
                         Text(sub)
                             .font(.system(size: 11))
@@ -412,12 +419,13 @@ struct BatteryRing: View {
                     Image(systemName: "bolt.fill")
                         .font(.system(size: max(size * 0.17, 8), weight: .bold))
                         .foregroundStyle(Theme.accent)
-                        .symbolEffect(.pulse)
                 }
                 Text(reading.map { "\($0.level)%" } ?? "—")
                     .font(.system(size: max(size * 0.22, 10.5), weight: .semibold, design: .rounded).monospacedDigit())
                     .foregroundStyle(reading == nil || stale ? .secondary : .primary)
                     .contentTransition(.numericText())
+                    .lineLimit(1)
+                    .fixedSize()
             }
         }
         .accessibilityElement(children: .ignore)
@@ -495,41 +503,43 @@ struct GlassSegmented<Option: Hashable & Identifiable>: View {
     @Namespace private var ns
 
     var body: some View {
-        GlassEffectContainer(spacing: 4) {
-            HStack(spacing: 4) {
-                ForEach(options) { option in
-                    let selected = option == selection
-                    Button {
-                        withAnimation(.spring(duration: 0.4, bounce: 0.3)) { selection = option }
-                    } label: {
-                        HStack(spacing: 6) {
-                            if let s = symbol(option) {
-                                Image(systemName: s).font(.system(size: 12, weight: .semibold))
-                            }
-                            Text(title(option))
-                                .font(.system(size: 12.5, weight: selected ? .semibold : .medium, design: .rounded))
-                                .lineLimit(1)
+        HStack(spacing: 4) {
+            ForEach(options) { option in
+                let selected = option == selection
+                Button {
+                    withAnimation(.spring(duration: 0.4, bounce: 0.25)) { selection = option }
+                } label: {
+                    HStack(spacing: 6) {
+                        if let s = symbol(option) {
+                            Image(systemName: s).font(.system(size: 12, weight: .semibold))
                         }
-                        .foregroundStyle(selected ? Color.white : Color.primary)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 8)
-                        .frame(maxWidth: .infinity)
-                        .contentShape(Capsule())
+                        Text(title(option))
+                            .font(.system(size: 12.5, weight: selected ? .semibold : .medium, design: .rounded))
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.85)
                     }
-                    .buttonStyle(.plain)
-                    .background {
-                        if selected {
-                            Capsule()
-                                .fill(.clear)
-                                .glassEffect(.regular.tint(Theme.accent).interactive(), in: .capsule)
-                                .glassEffectID("selection", in: ns)
-                        }
+                    .foregroundStyle(selected ? Color.white : Color.primary)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .frame(maxWidth: .infinity)
+                    .contentShape(Capsule())
+                }
+                .buttonStyle(.plain)
+                .background {
+                    // A solid accent pill that slides between options. (A tinted glass
+                    // morph lost its tint and left white text on light gray in light mode.)
+                    if selected {
+                        Capsule()
+                            .fill(Theme.accent.gradient)
+                            .shadow(color: Theme.accent.opacity(0.35), radius: 5, y: 2)
+                            .matchedGeometryEffect(id: "selection", in: ns)
                     }
                 }
+                .accessibilityAddTraits(selected ? .isSelected : [])
             }
-            .padding(4)
-            .glassEffect(.regular, in: .capsule)
         }
+        .padding(4)
+        .glassEffect(.regular, in: .capsule)
     }
 }
 

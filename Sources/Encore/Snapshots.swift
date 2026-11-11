@@ -59,7 +59,7 @@ enum Snapshots {
     private static func makePopoverStandIn(model: AppModel) -> NSPanel {
         let content = MenuBarPanel()
             .environment(model)
-            .background(.clear)
+            .clipShape(.rect(cornerRadius: 22, style: .continuous))   // keep the glow inside, like the real popover
             .glassEffect(.regular, in: .rect(cornerRadius: 22, style: .continuous))
             .padding(24)                          // room for the shadow
         let host = NSHostingView(rootView: content)
