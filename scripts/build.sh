@@ -8,7 +8,7 @@ BUILD="$ROOT/build"
 APP="$BUILD/Encore.app"
 SDK="$(xcrun --show-sdk-path)"
 TARGET="$(uname -m)-apple-macos26.0"
-VERSION="${VERSION:-1.0}"
+VERSION="${VERSION:-1.0.1}"
 
 cd "$ROOT"
 mkdir -p "$BUILD"
