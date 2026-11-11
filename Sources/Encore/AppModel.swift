@@ -87,6 +87,13 @@ final class AppModel {
     // MARK: Events
 
     private func earbudsReady(_ buds: Earbuds) {
+        if Snapshots.outputDirectory != nil {
+            // README screenshots (one run, then Encore quits). Let the earbuds report first.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 4) { [weak self] in
+                if let self { Snapshots.run(model: self) }
+            }
+            return
+        }
         if UserDefaults.standard.bool(forKey: PrefKey.showPopup) {
             hud.show(buds)
         }

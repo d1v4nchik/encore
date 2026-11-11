@@ -8,24 +8,16 @@ enum Theme {
     static let cardRadius: CGFloat = 24
 }
 
-/// Soft, slowly drifting wash of the accent color so the glass has something to refract.
-/// Animated by SwiftUI (display refresh rate) and frozen while the window is hidden.
+/// Soft wash of the accent color so the glass has something to refract.
+/// Deliberately static: animating what sits *behind* glass makes every glass card
+/// re-render each frame, which is what made the window feel laggy.
 struct AuroraBackground: View {
     @Environment(\.colorScheme) private var scheme
-    @Environment(\.windowIsVisible) private var visible
-
-    private static let drift: [(Float, Float)] = [(0, 0), (0.09, -0.07), (-0.08, 0.08)]
 
     var body: some View {
         ZStack {
             Color(nsColor: .windowBackgroundColor)
-            if visible {
-                PhaseAnimator([0, 1, 2]) { phase in
-                    mesh(Self.drift[phase])
-                } animation: { _ in .easeInOut(duration: 8) }
-            } else {
-                mesh(Self.drift[0])
-            }
+            mesh((0.06, -0.05))
             RadialGradient(colors: [Theme.accent.opacity(0.25 * k), .clear], center: .bottomTrailing,
                            startRadius: 0, endRadius: 420)
                 .hueRotation(.degrees(35))
